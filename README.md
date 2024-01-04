@@ -1,0 +1,2 @@
+# rangebot
+Range testing bot
