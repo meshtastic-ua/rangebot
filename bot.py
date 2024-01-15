@@ -1,21 +1,31 @@
 #!/usr/bin/env python3
 
+import configparser
+import os
 import time
 
 from haversine import haversine, Unit
 from humanize import intcomma
-from meshtastic import serial_interface as serial
+from meshtastic import serial_interface as serial, tcp_interface as tcp
 from pubsub import pub
 
 class RangeBot:
     def __init__(self, port=None):
-        self.interface = serial.SerialInterface()
+        self.config = configparser.RawConfigParser()
+        if os.path.exists('config.ini'):
+            self.config.read('config.ini')
+        else:
+            raise RuntimeError('Config file could not be found...')
+        devPath = self.config['Meshtastic']['port']
+        if devPath == 'auto':
+            self.interface = serial.SerialInterface()
+        elif devPath.startswith('/dev/'):
+            self.interface = serial.SerialInterface(devPath)
+        else:
+            self.interface = tcp.TCPInterface(hostname=devPath.lstrip('tcp:'))
 
     @property
     def my_id(self):
-        #self.interface.getMyNodeInfo().get('user', {}).get('id')
-        #hex(self.interface.localNode.nodeNum).replace('0x', '!')
-        #hex(self.interface.myInfo.my_node_num).replace('0x', '!')
         return self.interface.getMyUser().get('id')
 
     @property
@@ -33,16 +43,16 @@ class RangeBot:
 
         message = decoded.get('payload').decode()
         print(message)
-        if not message.lower() in ['ping', 'test']:
+        if not message.lower() in ['ping', 'test', 'p', 't']:
             return
         distance = 0
         try:
-            distance = self.distance(node_id)
+            distance = int(self.distance(node_id))
         except Exception as exc:
             print(repr(exc), node_id)
             return
-
-        msg=f'pong at {intcomma(distance)}m'
+        datetime = time.strftime('%y/%m/%d %H:%M:%S')
+        msg=f'pong at {datetime} range {intcomma(distance)}m'
         print(msg, node_id)
         self.interface.sendText(msg, destinationId=node_id)
 
@@ -59,9 +69,8 @@ class RangeBot:
             raise RuntimeError('no lat or lon')
         return latitude, longitude
 
-    def onConnection(self, interface, topic=pub.AUTO_TOPIC): # called when we (re)connect to the radio
+    def onConnection(self, interface, topic=pub.AUTO_TOPIC):
         print('Connected to device')
-        # self.interface.sendText("hello mesh")
 
     def run(self):
         pub.subscribe(self.onReceive, "meshtastic.receive")
