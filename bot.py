@@ -38,6 +38,9 @@ class RangeBot:
     def onReceive(self, packet, interface): # called when a packet arrives
         decoded = packet.get('decoded')
         node_id = packet.get('fromId')
+        if not decoded:
+            return
+
         if decoded.get('portnum') != 'TEXT_MESSAGE_APP' or node_id == self.my_id:
             return
 
